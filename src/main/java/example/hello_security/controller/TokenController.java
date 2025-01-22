@@ -2,18 +2,24 @@ package example.hello_security.controller;
 
 import example.hello_security.controller.dto.LoginRequest;
 import example.hello_security.controller.dto.LoginResponse;
+import example.hello_security.entities.Role;
+import example.hello_security.entities.User;
 import example.hello_security.repository.UserRepository;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 public class TokenController {
@@ -42,16 +48,29 @@ public class TokenController {
         var now = Instant.now();
         var expiresIn = 300L;
 
+        var scopes = user.get().getRoles()
+                .stream()
+                .map(Role::getName)
+                .collect(Collectors.joining(" "));
+
         var claims = JwtClaimsSet.builder()
                 .issuer("mybackend")
                 .subject(user.get().getUserId().toString())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(expiresIn))
+                .claim("scope", scopes)
                 .build();
 
         var jwtValue = jwtEncoder.encode(JwtEncoderParameters.from(claims)).getTokenValue();
 
         return ResponseEntity.ok(new LoginResponse(jwtValue, expiresIn));
+    }
+
+    @GetMapping("/users")
+    @PreAuthorize("hasAuthority('SCOPE_admin')")
+    public ResponseEntity<List<User>> listUsers() {
+        var users = userRepository.findAll();
+        return ResponseEntity.ok(users);
     }
 }
 
